@@ -13,8 +13,7 @@
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
     "jsx": "react-jsx",
-    "resolveJsonModule": true,
-    "allowImportingTsExtensions": true
+    "resolveJsonModule": true
   },
   "include": ["src"],
   "references": [{ "path": "./tsconfig.node.json" }]
