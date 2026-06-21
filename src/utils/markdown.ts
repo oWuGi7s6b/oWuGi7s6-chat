@@ -10,7 +10,7 @@ marked.setOptions({
 
 // 代码高亮
 marked.setOptions({
-  highlight: (code, lang) => {
+  highlight: (code: string, lang: string | undefined) => {
     if (lang && hljs.getLanguage(lang)) {
       return hljs.highlight(code, { language: lang }).value;
     }
