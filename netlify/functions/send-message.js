@@ -22,7 +22,7 @@ async function getConnection() {
       connectionLimit: 10,
       queueLimit: 0,
       enableKeepAlive: true,
-      keepAliveInitialDelayMs: 0,
+      // 删除 keepAliveInitialDelayMs: 0
       ssl: process.env.TIDB_SSL === 'true' ? { rejectUnauthorized: false } : false
     });
     console.log('Connection pool created successfully');
@@ -30,8 +30,7 @@ async function getConnection() {
   return connectionPool;
 }
 
-async function initializeDatabase() {
-  const pool = await getConnection();
+async function initializeDatabase(pool) {
   await pool.execute(`
     CREATE TABLE IF NOT EXISTS messages (
       id INT AUTO_INCREMENT PRIMARY KEY,
@@ -74,6 +73,8 @@ exports.handler = async (event, context) => {
   }
 
   try {
+    // 捕获body为空的情况
+    if (!event.body) throw new Error('Request body is empty');
     const { username, content } = JSON.parse(event.body);
 
     if (!username || !content) {
@@ -84,7 +85,9 @@ exports.handler = async (event, context) => {
       };
     }
 
-    if (username.length > 50 || content.length > 5000) {
+    const uname = username.trim();
+    const text = content.trim();
+    if (uname.length > 50 || text.length > 5000) {
       return {
         statusCode: 400,
         headers: corsHeaders(),
@@ -92,13 +95,14 @@ exports.handler = async (event, context) => {
       };
     }
 
-    await initializeDatabase();
     const pool = await getConnection();
+    await initializeDatabase(pool);
     
     const [result] = await pool.execute(
       'INSERT INTO messages (username, content) VALUES (?, ?)',
-      [username.trim(), content.trim()]
+      [uname, text]
     );
+    console.log('Message insert success, id:', result.insertId);
 
     return {
       statusCode: 201,
@@ -107,14 +111,14 @@ exports.handler = async (event, context) => {
         success: true,
         data: {
           id: result.insertId,
-          username,
-          content,
+          username: uname,
+          content: text,
           created_at: new Date().toISOString()
         }
       })
     };
   } catch (error) {
-    console.error('Database error:', error.message);
+    console.error('Send message full error:', error);
     return {
       statusCode: 500,
       headers: corsHeaders(),
