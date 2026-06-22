@@ -22,7 +22,7 @@ async function getConnection() {
       connectionLimit: 10,
       queueLimit: 0,
       enableKeepAlive: true,
-      keepAliveInitialDelayMs: 0,
+      // 删掉 keepAliveInitialDelayMs: 0 这一行！
       ssl: process.env.TIDB_SSL === 'true' ? { rejectUnauthorized: false } : false
     });
     console.log('Connection pool created successfully');
@@ -30,8 +30,7 @@ async function getConnection() {
   return connectionPool;
 }
 
-async function initializeDatabase() {
-  const pool = await getConnection();
+async function initializeDatabase(pool) {
   await pool.execute(`
     CREATE TABLE IF NOT EXISTS messages (
       id INT AUTO_INCREMENT PRIMARY KEY,
@@ -75,11 +74,21 @@ exports.handler = async (event, context) => {
   }
 
   try {
-    await initializeDatabase();
     const pool = await getConnection();
-    
-    const limit = Math.min(parseInt(event.queryStringParameters?.limit) || 50, 100);
-    const offset = parseInt(event.queryStringParameters?.offset) || 0;
+    await initializeDatabase(pool);
+
+    // 修复NaN问题：先取值，再转数字，不存在则赋值0
+    let limit = event.queryStringParameters?.limit;
+    let offset = event.queryStringParameters?.offset;
+    limit = limit ? Math.min(Number(limit), 100) : 50;
+    offset = offset ? Number(offset) : 0;
+
+    // 强制转为整数，防止小数/NaN
+    limit = Math.floor(limit);
+    offset = Math.floor(offset);
+    // 最小不能小于0
+    limit = Math.max(limit, 1);
+    offset = Math.max(offset, 0);
 
     const [messages] = await pool.execute(
       'SELECT id, username, content, created_at FROM messages ORDER BY created_at DESC LIMIT ? OFFSET ?',
@@ -95,7 +104,8 @@ exports.handler = async (event, context) => {
       })
     };
   } catch (error) {
-    console.error('Database error:', error.message);
+    // 打印完整错误堆栈，方便排查
+    console.error('Database full error:', error);
     return {
       statusCode: 500,
       headers: corsHeaders(),
