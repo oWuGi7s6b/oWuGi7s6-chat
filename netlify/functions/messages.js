@@ -22,11 +22,25 @@ async function getConnection() {
       connectionLimit: 10,
       queueLimit: 0,
       enableKeepAlive: true,
+      keepAliveInitialDelayMs: 0,
       ssl: process.env.TIDB_SSL === 'true' ? { rejectUnauthorized: false } : false
     });
     console.log('Connection pool created successfully');
   }
   return connectionPool;
+}
+
+async function initializeDatabase() {
+  const pool = await getConnection();
+  await pool.execute(`
+    CREATE TABLE IF NOT EXISTS messages (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      username VARCHAR(50) NOT NULL,
+      content LONGTEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_created_at (created_at)
+    )
+  `);
 }
 
 function corsHeaders() {
@@ -61,19 +75,16 @@ exports.handler = async (event, context) => {
   }
 
   try {
+    await initializeDatabase();
     const pool = await getConnection();
     
     const limit = Math.min(parseInt(event.queryStringParameters?.limit) || 50, 100);
     const offset = parseInt(event.queryStringParameters?.offset) || 0;
 
-    console.log(`Fetching messages: limit=${limit}, offset=${offset}`);
-
     const [messages] = await pool.execute(
       'SELECT id, username, content, created_at FROM messages ORDER BY created_at DESC LIMIT ? OFFSET ?',
       [limit, offset]
     );
-
-    console.log(`Successfully fetched ${messages.length} messages`);
 
     return {
       statusCode: 200,
