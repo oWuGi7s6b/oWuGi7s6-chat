@@ -22,11 +22,25 @@ async function getConnection() {
       connectionLimit: 10,
       queueLimit: 0,
       enableKeepAlive: true,
+      keepAliveInitialDelayMs: 0,
       ssl: process.env.TIDB_SSL === 'true' ? { rejectUnauthorized: false } : false
     });
     console.log('Connection pool created successfully');
   }
   return connectionPool;
+}
+
+async function initializeDatabase() {
+  const pool = await getConnection();
+  await pool.execute(`
+    CREATE TABLE IF NOT EXISTS messages (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      username VARCHAR(50) NOT NULL,
+      content LONGTEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_created_at (created_at)
+    )
+  `);
 }
 
 function corsHeaders() {
@@ -78,16 +92,13 @@ exports.handler = async (event, context) => {
       };
     }
 
+    await initializeDatabase();
     const pool = await getConnection();
     
-    console.log(`Inserting message from ${username}...`);
-
     const [result] = await pool.execute(
       'INSERT INTO messages (username, content) VALUES (?, ?)',
       [username.trim(), content.trim()]
     );
-
-    console.log(`Message inserted with ID: ${result.insertId}`);
 
     return {
       statusCode: 201,
