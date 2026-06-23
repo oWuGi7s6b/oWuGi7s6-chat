@@ -22,7 +22,7 @@ async function getConnection() {
       connectionLimit: 10,
       queueLimit: 0,
       enableKeepAlive: true,
-      // 删掉 keepAliveInitialDelayMs: 0 这一行！
+      // 已删除 keepAliveInitialDelayMs 无效参数
       ssl: process.env.TIDB_SSL === 'true' ? { rejectUnauthorized: false } : false
     });
     console.log('Connection pool created successfully');
@@ -77,18 +77,23 @@ exports.handler = async (event, context) => {
     const pool = await getConnection();
     await initializeDatabase(pool);
 
-    // 修复NaN问题：先取值，再转数字，不存在则赋值0
-    let limit = event.queryStringParameters?.limit;
-    let offset = event.queryStringParameters?.offset;
-    limit = limit ? Math.min(Number(limit), 100) : 50;
-    offset = offset ? Number(offset) : 0;
+    // 读取原始查询参数
+    const rawLimit = event.queryStringParameters?.limit;
+    const rawOffset = event.queryStringParameters?.offset;
 
-    // 强制转为整数，防止小数/NaN
-    limit = Math.floor(limit);
+    // 强制转换数字 + 兜底修复 NaN/负数
+    let limit = Number(rawLimit);
+    let offset = Number(rawOffset);
+
+    if (isNaN(limit) || limit < 1) limit = 50;
+    if (isNaN(offset) || offset < 0) offset = 0;
+
+    // 限制最大值、转为整数
+    limit = Math.floor(Math.min(limit, 100));
     offset = Math.floor(offset);
-    // 最小不能小于0
-    limit = Math.max(limit, 1);
-    offset = Math.max(offset, 0);
+
+    // 打印调试日志，方便看参数值
+    console.log('LIMIT/OFFSET DEBUG', { limit, offset, rawLimit, rawOffset });
 
     const [messages] = await pool.execute(
       'SELECT id, username, content, created_at FROM messages ORDER BY created_at DESC LIMIT ? OFFSET ?',
@@ -104,7 +109,6 @@ exports.handler = async (event, context) => {
       })
     };
   } catch (error) {
-    // 打印完整错误堆栈，方便排查
     console.error('Database full error:', error);
     return {
       statusCode: 500,
