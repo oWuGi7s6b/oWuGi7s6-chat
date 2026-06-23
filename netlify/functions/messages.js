@@ -22,7 +22,6 @@ async function getConnection() {
       connectionLimit: 10,
       queueLimit: 0,
       enableKeepAlive: true,
-      // 已删除 keepAliveInitialDelayMs 无效参数
       ssl: process.env.TIDB_SSL === 'true' ? { rejectUnauthorized: false } : false
     });
     console.log('Connection pool created successfully');
@@ -77,25 +76,22 @@ exports.handler = async (event, context) => {
     const pool = await getConnection();
     await initializeDatabase(pool);
 
-    // 读取原始查询参数
     const rawLimit = event.queryStringParameters?.limit;
     const rawOffset = event.queryStringParameters?.offset;
 
-    // 强制转换数字 + 兜底修复 NaN/负数
     let limit = Number(rawLimit);
     let offset = Number(rawOffset);
 
     if (isNaN(limit) || limit < 1) limit = 50;
     if (isNaN(offset) || offset < 0) offset = 0;
 
-    // 限制最大值、转为整数
     limit = Math.floor(Math.min(limit, 100));
     offset = Math.floor(offset);
 
-    // 打印调试日志，方便看参数值
     console.log('LIMIT/OFFSET DEBUG', { limit, offset, rawLimit, rawOffset });
 
-    const [messages] = await pool.execute(
+    // 核心修改：把 execute 换成 query
+    const [messages] = await pool.query(
       'SELECT id, username, content, created_at FROM messages ORDER BY created_at DESC LIMIT ? OFFSET ?',
       [limit, offset]
     );
