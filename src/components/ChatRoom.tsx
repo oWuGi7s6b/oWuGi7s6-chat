@@ -35,7 +35,6 @@ export const ChatRoom: React.FC = () => {
     <div className="h-screen flex flex-col bg-white">
       <div className="bg-gradient-to-r from-blue-500 to-purple-600 text-white p-4 shadow-md">
         <h1 className="text-2xl font-bold">💬 聊天室</h1>
-        <a href="/about.html" style="text-decoration: none;" class="float-right">关于</a>
       </div>
 
       {error && (
